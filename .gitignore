@@ -1,0 +1,7 @@
+pyvenv
+*.egg-info
+.coverage
+.tox
+docs/doc
+__pycache__
+temp
