@@ -1,7 +1,13 @@
 from typing import Dict, List, Optional
 from pathlib import Path
 from datetime import datetime
-from divelog_convert.formater import DiveLogEntry, DiveLogFormater, DiveUnitPressure, DiveUnitDistance, DiveViolation
+from divelog_convert.formater import (
+    DiveLogbook,DiveLogEntry,
+    DiveLogFormater,
+    DiveUnitPressure,
+    DiveUnitDistance,
+    DiveViolation
+)
 
 
 class DL7DiveLogFormater(DiveLogFormater):
@@ -92,19 +98,19 @@ class DL7DiveLogFormater(DiveLogFormater):
             pressure_drop
         )
 
-    def read_dives(self, filename: Path) -> List[DiveLogEntry]:
+    def read_dives(self, filename: Path) -> DiveLogbook:
         raise NotImplementedError("DL7 dive log module doesn't support decoding")
 
-    def write_dives(self, filename: Path, dives: List[DiveLogEntry], single_file:bool = True):
+    def write_dives(self, filename: Path, logbook: DiveLogbook, single_file:bool = True):
         # Make sur the destination file has the right suffix
         if filename.suffix != self.ext:
             filename = filename.with_suffix(self.ext)
 
         if single_file:
-            self.write_dive_data(filename, dives)
+            self.write_dive_data(filename, logbook.dives)
         else:
             i = 1
-            for dive in dives:
+            for dive in logbook.dives:
                 self.write_dive_data(filename.with_stem(f"{filename.stem}_{i}"), [dive])
                 i += 1
 
@@ -133,9 +139,9 @@ class DL7DiverlogDiveLogFormater(DL7DiveLogFormater):
     def name(self):
         return "diverlog"
 
-    def write_dives(self, filename: Path, dives: List[DiveLogEntry], single_file:bool = True):
+    def write_dives(self, filename: Path, logbook: DiveLogbook, single_file:bool = True):
         # Diverlogs only support 1 dive per file
-        return super().write_dives(filename, dives, single_file =False)
+        return super().write_dives(filename, logbook, single_file =False)
 
     def _build_zar(self, dive: DiveLogEntry):
         zar_data = "ZAR{\n<AQUALUNG>\n<APP>DiverLog+</APP>\n"
@@ -181,23 +187,24 @@ class DL7DiverlogDiveLogFormater(DL7DiveLogFormater):
         )
         zar_data += "SI=000000,MAXDEPTH={},MAXO2=0,PO2={},MINTEMP={}</DIVESTATS>\n".format(
             dive.stats.maxdepth,
-            dive.equipment.tanks[0].airmix.po2(),
+            dive.equipment.gas[0].airmix.po2(),
             dive.stats.mintemp,
         )
         i = 1
-        for tank in dive.equipment.tanks:
-            zar_data += "<TANK>NUMBER={},TID=0,ON=Y,CYLNAME=[{}],CYLSIZE={}{},WORKINGPRESSURE=3000PSI,".format(
-                i,
-                tank.name,
-                tank.volume,
-                self._config.unit_volume.value,
-            )
-            zar_data += "STARTPRESSURE={},ENDPRESSURE={},FO2=0,AVGDEPTH={},DIVETIME={},SAC=0</TANK>\n".format(
-                dive.stats.pressure_in,
-                dive.stats.pressure_out,
-                dive.stats.avgdepth,
-                dive.stats.duration_min()
-            )
+        for gas in dive.equipment.gas:
+            if gas.tank:
+                zar_data += "<TANK>NUMBER={},TID=0,ON=Y,CYLNAME=[{}],CYLSIZE={}{},WORKINGPRESSURE=3000PSI,".format(
+                    i,
+                    gas.tank.name,
+                    gas.tank.volume,
+                    self._config.unit_volume.value,
+                )
+                zar_data += "STARTPRESSURE={},ENDPRESSURE={},FO2=0,AVGDEPTH={},DIVETIME={},SAC=0</TANK>\n".format(
+                    dive.stats.pressure_in,
+                    dive.stats.pressure_out,
+                    dive.stats.avgdepth,
+                    dive.stats.duration_min()
+                )
             i = i + 1
 
         zar_data += "</AQUALUNG>\n}\n"

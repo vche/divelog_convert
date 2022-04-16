@@ -1,4 +1,3 @@
-from sre_constants import LITERAL
 import attr
 import logging
 from abc import ABC, abstractmethod
@@ -36,7 +35,7 @@ class DiveUnitVolume(Enum):
 
 class DiveLogItem:
     def uuid(self):
-        return f"{self.__class__.__name__.lower()}-{self.strid()}".replace(" ","_")
+        return f"{self.__class__.__name__}-{self.strid()}".replace(" ","_").lower() if self.strid() else None
     
     def strid(self):
         return ""
@@ -78,6 +77,10 @@ class DiveLogLocation(DiveLogItem):
     street = attr.ib(default=None, type=str)
     country = attr.ib(default=None, type=str)
 
+    def __attrs_post_init__(self):
+        if not self.divesite and self.locname:
+            self.divesite = self.locname
+
     def strid(self):
         return self.divesite
 
@@ -92,7 +95,7 @@ class Diver(DiveLogItem):
         return cls(first_name=tokens[0], last_name=" ".join(tokens[1:]))
 
     def strid(self):
-        return f"{self.first_name} {self.last_name}"
+        return f"{self.first_name} {self.last_name}" if self.first_name and self.last_name else ""
 
 
 @attr.s
@@ -140,10 +143,9 @@ class DiveAirMix(DiveLogItem):
 class DiveTank(DiveLogItem):
     name = attr.ib(type = str)
     volume = attr.ib(default = 0, type = int)
-    airmix = attr.ib(factory=DiveAirMix, type=DiveAirMix)
 
     def strid(self):
-        return f"{self.name} {self.volume}"
+        return f"{self.name} {self.volume}" if self.name and self.volume else ""
 
 
 @attr.s
@@ -156,7 +158,7 @@ class DiveComputer(DiveLogItem):
     sampling_period = attr.ib(default=1, type=int)
 
     def strid(self):
-        return f"{self.type} {self.sn}"
+        return f"{self.type} {self.sn}" if self.type and self.sn else ""
 
 
 @attr.s
@@ -192,11 +194,16 @@ class DiveLogStats:
 
 
 @attr.s
+class DiveGas:
+    tank = attr.ib(default=None, type=DiveTank)
+    airmix = attr.ib(factory=DiveAirMix, type=DiveAirMix)
+
+@attr.s
 class DiveEquipment:
     pdc = attr.ib(factory=DiveComputer, type=DiveComputer)
     suit = attr.ib(default=None, type=DiveSuit)
-    tanks = attr.ib(factory=list, type=DiveTank)
     weight = attr.ib(default=0, type=int)
+    gas = attr.ib(factory=list, type=list[DiveGas])
 
 
 @attr.s
@@ -221,6 +228,52 @@ class DiveLogEntry:
     rating = attr.ib(default=0, type=int)
 
 
+def add_dive_item(item_list: Dict[str, DiveLogItem], item: DiveLogItem):
+    if not item or not item.uuid():
+        return None
+    uuid = item.uuid()
+    if uuid not in item_list:
+        item_list[uuid] = item
+    return item_list[uuid]
+
+
+@attr.s
+class DiveLogbook:
+    diver = attr.ib(default=None, type=dict[Diver])
+    locations = attr.ib(factory=dict, type=dict[DiveLogLocation])
+    buddies = attr.ib(factory=dict, type=dict[Diver])
+    airmix = attr.ib(factory=dict, type=dict[DiveAirMix])
+    suits = attr.ib(factory=dict, type=dict[DiveSuit])
+    tanks = attr.ib(factory=dict, type=dict[DiveTank])
+    pdcs = attr.ib(factory=dict, type=dict[DiveComputer])
+
+    dives = attr.ib(factory=list, type=list[DiveLogEntry])
+
+    def add_airmix(self, item: DiveAirMix):
+        return add_dive_item(self.airmix, item)
+
+    def add_dive(self, dive: DiveLogEntry):
+        # Add items to the main logbook list if not already there
+        buddies = []
+        for buddy in dive.buddies:
+            new_buddy = add_dive_item(self.buddies, buddy)
+            if new_buddy:
+                buddies.append(new_buddy)
+            dive.buddies = buddies
+
+        dive.location = add_dive_item(self.locations, dive.location)
+        dive.equipment.pdc = add_dive_item(self.pdcs, dive.equipment.pdc)
+        if dive.equipment.suit:
+            dive.equipment.suit = add_dive_item(self.suits, dive.location)
+
+        for gas in dive.equipment.gas:
+            gas.airmix = self.add_airmix(gas.airmix)
+            if gas.tank:
+                gas.tank = add_dive_item(self.tanks, gas.tank)
+
+        self.dives.append(dive)
+
+
 class DiveLogFormater(ABC):
 
     @property
@@ -241,9 +294,9 @@ class DiveLogFormater(ABC):
         return f"'{self.name}' ({self.ext})"
 
     @abstractmethod
-    def read_dives(self, filename: Path) -> List[DiveLogEntry]:
+    def read_dives(self, filename: Path) -> DiveLogbook:
         ...
 
     @abstractmethod
-    def write_dives(self, filename: Path, dives: List[DiveLogEntry]):
+    def write_dives(self, filename: Path, logbook: DiveLogbook):
         ...

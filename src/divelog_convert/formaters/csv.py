@@ -1,14 +1,16 @@
 import csv
 import json
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 from typing import Dict, List, Optional, Tuple, Union
 from pathlib import Path
 from datetime import datetime, timedelta
 
 from divelog_convert.formater import (
     Diver,
+    DiveLogbook,
     DiveAirMix,
     DiveComputer,
+    DiveGas,
     DiveEquipment,
     DiveLogLocation,
     DiveLogData,
@@ -29,31 +31,30 @@ class CsvDiveLogFormater(DiveLogFormater):
     def name(self):
         return "csv"
 
-    def read_dives(self, filename: Path) -> List[DiveLogEntry]:
+    def read_dives(self, filename: Path) -> DiveLogbook:
         with open(filename, "r") as dive_file:
             self.log.info(f"Reading dives read from {filename}")
             csv_reader = csv.DictReader(dive_file)
-            dives = []
+            logbook = DiveLogbook()
             errors = 0
             for row in csv_reader:
                 try:
-                    dive_entry = self.build_dive_log_entry(row)
-                    dives.append(dive_entry)
+                    self.add_dive_log_entry(logbook, row)
                 except Exception as e:
                     self.log.exception(f"Failed to build log entry: {e}")
                     errors += 1
-            self.log.info(f"{len(dives)} dives read from {filename}, {errors} errors")
-            return dives
+            self.log.info(f"{len(logbook.dives)} dives read from {filename}, {errors} errors")
+            return logbook
 
-    def write_dives(self, filename: Path, dives: List[DiveLogEntry]):
+    def write_dives(self, filename: Path, logbook: DiveLogbook):
         if filename.suffix != self.ext:
             filename = filename.with_suffix(self.ext)
 
         with open(filename, "w") as dive_file:
-            self.log.info(f"Writing {len(dives)} dives written to {filename}")
+            self.log.info(f"Writing {len(logbook.dives)} dives written to {filename}")
             csv_writer = csv.DictWriter(dive_file, fieldnames=self.get_fieldnames())
             csv_writer.writeheader()
-            for dive in dives:
+            for dive in logbook.dives:
                 csv_writer.writerow(self.build_dive_log_row(dive))
 
     @abstractmethod
@@ -61,7 +62,7 @@ class CsvDiveLogFormater(DiveLogFormater):
         ...
 
     @abstractmethod
-    def build_dive_log_entry(self, csv_row: Dict[str, str]) -> DiveLogEntry:
+    def add_dive_log_entry(self, logbook: DiveLogbook, csv_row: Dict[str, str]) -> DiveLogEntry:
         ...
 
     @abstractmethod
@@ -180,10 +181,10 @@ class DiviacCsvDiveLogFormater(CsvDiveLogFormater):
         sampling_period = round(global_period/(len(dive_samples)-1))
         return sampling_period, list(all_violations), dive_data
 
-    def build_dive_log_entry(self, csv_row: Dict[str, str]) -> DiveLogEntry:
+    def add_dive_log_entry(self, logbook: DiveLogbook, csv_row: Dict[str, str]) -> DiveLogEntry:
         city, state, country = self._parse_location(csv_row.get("Location"))
         po2 = csv_row.get("O2 %").replace("%", "") if csv_row.get("O2 %") else 0
-        airmix = DiveAirMix(o2=float(po2)/100)
+        airmix = logbook.add_airmix(DiveAirMix(o2=float(po2)/100))
 
         sampling_period, all_violations, dive_data = self._parse_dive_data(
             csv_row.get("Dive profile data", "[]"), airmix
@@ -219,18 +220,21 @@ class DiviacCsvDiveLogFormater(CsvDiveLogFormater):
                     sn = self._config.pdc_sn,
                 ),
                 weight = int(csv_row.get("Weight")) if csv_row.get("Weight") else 0,
-                tanks = [DiveTank(
-                    name = csv_row.get("Tank type"),
-                    volume = int(self._strip_unit(csv_row.get("Tank volume"))) if csv_row.get("Tank volume") else 0,
+                gas = [DiveGas(
+                    tank = DiveTank(
+                        name = csv_row.get("Tank type"),
+                        volume = int(self._strip_unit(csv_row.get("Tank volume"))) if csv_row.get("Tank volume") else 0,
+                    ),
                     airmix = airmix,
-                )]
+                )],
             ),
             notes = csv_row.get(" Notes", ""),
             data = dive_data,
         )
         dive.stats.duration = timedelta(minutes = int(csv_row.get("Duration", 0)))
 
-        return dive
+        logbook.add_dive(dive)
+        return logbook
 
     def _add_temp_unit(self, value: Union[int, float]) -> str:
         return f"{value} °{self._config.unit_temperature.value}" if value is not None else None
@@ -249,9 +253,10 @@ class DiviacCsvDiveLogFormater(CsvDiveLogFormater):
 
         row["Dive #"] = entry.equipment.pdc.dive_num
         row["Date"] = entry.stats.start_datetime.strftime(self._date_fmt)
-        row["Location"] = entry.location.locname
-        row["Dive Site"] = entry.location.divesite
-        row["lat"], row["lng"] = entry.location.gps
+        if entry.location:
+            row["Location"] = entry.location.locname
+            row["Dive Site"] = entry.location.divesite
+            row["lat"], row["lng"] = entry.location.gps
         if entry.buddies:
             row["Dive buddy"] = entry.buddies[0].strid()
         row["Time in"] = entry.stats.start_datetime.strftime(self._time_fmt)
@@ -266,9 +271,10 @@ class DiviacCsvDiveLogFormater(CsvDiveLogFormater):
         row["Pressure out"] = self._add_pressure_unit(entry.stats.pressure_out)
         row["O2 %"] = f"{entry.data[0].airmix.po2()}%"
         row["Weight"] = entry.equipment.weight
-        row["Tank volume"] = self._add_volume_unit(entry.equipment.tanks[0].volume)
-        row["Tank type"] = entry.equipment.tanks[0].name
-        row["Notes"] = entry.notes,
+        row["Notes"] = entry.notes
+        if entry.equipment.gas[0].tank:
+            row["Tank volume"] = self._add_volume_unit(entry.equipment.gas[0].tank.volume)
+            row["Tank type"] = entry.equipment.gas[0].tank.name
 
         row["Dive profile data"] = []
         for sample in entry.data:
