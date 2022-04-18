@@ -10,7 +10,6 @@ from divelog_convert.formater import (
     DiveLogbook,
     DiveAirMix,
     DiveComputer,
-    DiveGas,
     DiveEquipment,
     DiveLogLocation,
     DiveLogData,
@@ -159,10 +158,11 @@ class DiviacCsvDiveLogFormater(CsvDiveLogFormater):
             for elt in dive_sample[3]:
                 try:
                     viol = DiveViolation(elt)
-                    violations.append(viol)
-                    all_violations.add(viol)
                 except ValueError:
                     self.log.error(f"Unrecognized dive violation '{elt}'")
+                    viol = DiveViolation.ERROR
+                violations.append(viol)
+                all_violations.add(viol)
 
             # Compute sampling period
             ts = float(dive_sample[0]) if dive_sample[0] else 0.0
@@ -190,6 +190,7 @@ class DiviacCsvDiveLogFormater(CsvDiveLogFormater):
             csv_row.get("Dive profile data", "[]"), airmix
         )
         dive = DiveLogEntry(
+            dive_num = int(csv_row.get("Dive #", 0)),
             diver = Diver(first_name=self._config.diver_first_name, last_name=self._config.diver_last_name),
             buddies = [Diver.from_full_name(csv_row.get("Dive buddy"))],
             location = DiveLogLocation(
@@ -210,23 +211,21 @@ class DiviacCsvDiveLogFormater(CsvDiveLogFormater):
                 violations = all_violations,
                 airtemp = self._strip_unit(csv_row.get("Air temp")),
                 surfacetemp = self._strip_unit(csv_row.get("Surface temp")),
+                visibility = self._strip_unit(csv_row.get("Visibility")),
             ),
             equipment = DiveEquipment(
                 pdc = DiveComputer(
-                    dive_num = int(csv_row.get("Dive #", 0)),
                     sampling_period = sampling_period, 
                     manufacturer = self._config.pdc_manufacturer,
                     type = self._config.pdc_type,
                     sn = self._config.pdc_sn,
                 ),
                 weight = int(csv_row.get("Weight")) if csv_row.get("Weight") else 0,
-                gas = [DiveGas(
-                    tank = DiveTank(
-                        name = csv_row.get("Tank type"),
-                        volume = int(self._strip_unit(csv_row.get("Tank volume"))) if csv_row.get("Tank volume") else 0,
-                    ),
-                    airmix = airmix,
+                tanks = [DiveTank(
+                    name = csv_row.get("Tank type"),
+                    volume = int(self._strip_unit(csv_row.get("Tank volume"))) if csv_row.get("Tank volume") else 0,
                 )],
+                airmixes = [airmix],
             ),
             notes = csv_row.get(" Notes", ""),
             data = dive_data,
@@ -251,7 +250,7 @@ class DiviacCsvDiveLogFormater(CsvDiveLogFormater):
     def build_dive_log_row(self, entry: DiveLogEntry) -> Dict[str, str]:
         row = dict.fromkeys(self.get_fieldnames(), "")
 
-        row["Dive #"] = entry.equipment.pdc.dive_num
+        row["Dive #"] = entry.dive_num
         row["Date"] = entry.stats.start_datetime.strftime(self._date_fmt)
         if entry.location:
             row["Location"] = entry.location.locname
@@ -271,10 +270,11 @@ class DiviacCsvDiveLogFormater(CsvDiveLogFormater):
         row["Pressure out"] = self._add_pressure_unit(entry.stats.pressure_out)
         row["O2 %"] = f"{entry.data[0].airmix.po2()}%"
         row["Weight"] = entry.equipment.weight
-        row["Notes"] = entry.notes
-        if entry.equipment.gas[0].tank:
-            row["Tank volume"] = self._add_volume_unit(entry.equipment.gas[0].tank.volume)
-            row["Tank type"] = entry.equipment.gas[0].tank.name
+        row["Notes"] = entry.notes,
+        row["Visibility"] = self._add_distance_unit(entry.stats.visibility),
+        if entry.equipment.tanks:
+            row["Tank volume"] = self._add_volume_unit(entry.equipment.tanks[0].volume)
+            row["Tank type"] = entry.equipment.tanks[0].name
 
         row["Dive profile data"] = []
         for sample in entry.data:

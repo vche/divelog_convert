@@ -59,8 +59,8 @@ class DL7DiveLogFormater(DiveLogFormater):
 
     def _build_zdh(self, dive: DiveLogEntry, sampling_period = None):
         return "ZDH|{}|{}|I|Q{}S|{}|{}||PO2|\n".format(
-            dive.equipment.pdc.dive_num,
-            dive.equipment.pdc.dive_num,
+            dive.dive_num,
+            dive.dive_num,
             sampling_period or dive.equipment.pdc.sampling_period,
             self._datetime(dive.stats.start_datetime),
             self._strval(dive.stats.airtemp),
@@ -90,8 +90,8 @@ class DL7DiveLogFormater(DiveLogFormater):
             pressure_drop = dive.stats.pressure_in - dive.stats.pressure_out 
 
         return "ZDT|{}|{}|{}|{}|{}|{}|\n".format(
-            dive.equipment.pdc.dive_num,
-            dive.equipment.pdc.dive_num,
+            dive.dive_num,
+            dive.dive_num,
             dive.stats.maxdepth,
             self._datetime(dive.stats.end_datetime),
             self._strval(dive.stats.mintemp),
@@ -151,7 +151,7 @@ class DL7DiverlogDiveLogFormater(DL7DiveLogFormater):
             self._strval(dive.equipment.pdc.sn),
             "_" if dive.equipment.pdc.sn else "",
             self._datetime(datetime.now()),
-            dive.equipment.pdc.dive_num
+            dive.dive_num
         )
         zar_data += "<TITLE> </TITLE>\n"
         zar_data += f"<DIVE_DT>{self._datetime(dive.stats.start_datetime)}</DIVE_DT>\n"
@@ -181,22 +181,22 @@ class DL7DiverlogDiveLogFormater(DL7DiveLogFormater):
         zar_data += "<RATING>{}</RATING>\n".format(dive.rating)
         hours, minutes, seconds = dive.stats.duration_hms()
         zar_data += "<DIVESTATS>DIVENO={},DATATYPE=8,DECO=N,VIOL={},MODE=0,MANUALDIVE=0,EDT={},".format(
-            dive.equipment.pdc.dive_num,
+            dive.dive_num,
             "N" if len(dive.stats.violations) == 0 else "Y",
             f"{hours}{minutes}{seconds}",
         )
         zar_data += "SI=000000,MAXDEPTH={},MAXO2=0,PO2={},MINTEMP={}</DIVESTATS>\n".format(
             dive.stats.maxdepth,
-            dive.equipment.gas[0].airmix.po2(),
+            dive.equipment.airmixes[0].po2(),
             dive.stats.mintemp,
         )
         i = 1
-        for gas in dive.equipment.gas:
-            if gas.tank:
+        for tank in dive.equipment.tanks:
+            if tank:
                 zar_data += "<TANK>NUMBER={},TID=0,ON=Y,CYLNAME=[{}],CYLSIZE={}{},WORKINGPRESSURE=3000PSI,".format(
                     i,
-                    gas.tank.name,
-                    gas.tank.volume,
+                    tank.name,
+                    tank.volume,
                     self._config.unit_volume.value,
                 )
                 zar_data += "STARTPRESSURE={},ENDPRESSURE={},FO2=0,AVGDEPTH={},DIVETIME={},SAC=0</TANK>\n".format(

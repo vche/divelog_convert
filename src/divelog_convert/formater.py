@@ -10,6 +10,8 @@ from enum import Enum
 class DiveViolation(Enum):
     ASCENT="Ascent rate violation"
     DECO="Decompression violation"
+    SURFACE="Surface violation"
+    ERROR="Generic Error"
 
 
 class DiveUnitDistance(Enum):
@@ -20,7 +22,41 @@ class DiveUnitDistance(Enum):
 class DiveUnitTemperature(Enum):
     CELSIUS="C"
     FAHRENHEIT="F"
-    KERVIN="K"
+    KELVIN="K"
+
+    def from_unit(self, from_unit, value:float):
+        return DiveUnitTemperature.convert_temperature_unit(from_unit, self, value)
+
+    def to_unit(self, to_unit, value:float):
+        return DiveUnitTemperature.convert_temperature_unit(self, to_unit, value)
+
+    def convert_temperature_unit(from_unit, to_unit, value):
+        if value is None:
+            return 0
+        if from_unit == DiveUnitTemperature.CELSIUS:
+            if to_unit == DiveUnitTemperature.FAHRENHEIT:
+                # (0°C × 9/5) + 32 = 32°F
+                return float(value) * (9/5) + 32
+            elif to_unit == DiveUnitTemperature.KELVIN:
+                # 0°C + 273.15 = 273.15K
+                return float(value) + 273.15
+        elif from_unit == DiveUnitTemperature.FAHRENHEIT:
+            if to_unit == DiveUnitTemperature.CELSIUS:
+                # (0°F − 32) × 5/9 = -17.78°C
+                return (float(value) - 32) * (5/9)
+
+            elif to_unit == DiveUnitTemperature.KELVIN:
+                # (0°F − 32) × 5/9 + 273.15 = 255.372K
+                return (float(value) - 32) * (5/9) + 273.15
+
+        elif from_unit == DiveUnitTemperature.KELVIN:
+            if to_unit == DiveUnitTemperature.CELSIUS:
+                # 0K − 273.15 = -273.1°C
+                return float(value) - 273.15
+            elif to_unit == DiveUnitTemperature.FAHRENHEIT:
+                # (0K − 273.15) × 9/5 + 32 = -459.7°F
+                return (float(value) - 273.15) * (9/5) + 32
+        return value
 
 
 class DiveUnitPressure(Enum):
@@ -76,6 +112,8 @@ class DiveLogLocation(DiveLogItem):
     state_province = attr.ib(default=None, type=str)
     street = attr.ib(default=None, type=str)
     country = attr.ib(default=None, type=str)
+    notes = attr.ib(default="", type=str)
+    rating = attr.ib(default=0, type=int)
 
     def __attrs_post_init__(self):
         if not self.divesite and self.locname:
@@ -150,7 +188,6 @@ class DiveTank(DiveLogItem):
 
 @attr.s
 class DiveComputer(DiveLogItem):
-    dive_num = attr.ib(default=1, type = int)
     manufacturer = attr.ib(default="", type = str)
     firmware = attr.ib(default="", type = str)
     type = attr.ib(default=None, type=str)
@@ -175,6 +212,7 @@ class DiveLogStats:
     violations = attr.ib(factory=list, type=list[DiveViolation])
     airtemp = attr.ib(default=0.0, type = float)
     surfacetemp = attr.ib(default=0.0, type = float)
+    visibility = attr.ib(default=0.0, type = float)
 
     @property
     def duration(self) -> timedelta:
@@ -194,16 +232,12 @@ class DiveLogStats:
 
 
 @attr.s
-class DiveGas:
-    tank = attr.ib(default=None, type=DiveTank)
-    airmix = attr.ib(factory=DiveAirMix, type=DiveAirMix)
-
-@attr.s
 class DiveEquipment:
     pdc = attr.ib(factory=DiveComputer, type=DiveComputer)
     suit = attr.ib(default=None, type=DiveSuit)
     weight = attr.ib(default=0, type=int)
-    gas = attr.ib(factory=list, type=list[DiveGas])
+    tanks = attr.ib(factory=list, type=list[DiveTank])
+    airmixes = attr.ib(factory=list, type=DiveAirMix)
 
 
 @attr.s
@@ -218,8 +252,9 @@ class DiveLogData:
 
 @attr.s
 class DiveLogEntry:
+    dive_num = attr.ib(default=1, type = int)
     location = attr.ib(factory=DiveLogLocation, type=DiveLogLocation)
-    diver = attr.ib(factory=list, type=Diver)
+    diver = attr.ib(default=None, type=Diver)
     buddies = attr.ib(factory=list, type=list[Diver])
     stats = attr.ib(factory=DiveLogStats, type=DiveLogStats)
     equipment = attr.ib(factory=DiveEquipment, type=DiveEquipment)
@@ -266,10 +301,15 @@ class DiveLogbook:
         if dive.equipment.suit:
             dive.equipment.suit = add_dive_item(self.suits, dive.location)
 
-        for gas in dive.equipment.gas:
-            gas.airmix = self.add_airmix(gas.airmix)
-            if gas.tank:
-                gas.tank = add_dive_item(self.tanks, gas.tank)
+        i = 0
+        for tank in dive.equipment.tanks:
+            if tank:
+                dive.equipment.tanks[i] = add_dive_item(self.tanks, tank)
+            i = i + 1
+        i = 0
+        for airmix in dive.equipment.airmixes:
+            dive.equipment.airmixes[i] = self.add_airmix(airmix)
+            i = i + 1
 
         self.dives.append(dive)
 
