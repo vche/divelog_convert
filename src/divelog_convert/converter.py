@@ -19,11 +19,12 @@ class DiveLogConverter():
         self.encoders = [
             DiviacCsvDiveLogFormater(self._config),
             DL7DiveLogFormater(self._config),
-            DL7DiverlogDiveLogFormater(self._config)
+            DL7DiverlogDiveLogFormater(self._config),
+            UddfDiveLogFormater(self._config),
         ]
         self.decoders = [
             DiviacCsvDiveLogFormater(self._config),
-            UddfDiveLogFormater(self._config)
+            UddfDiveLogFormater(self._config),
         ]
 
     def _get_formater(self, formaters: List[DiveLogFormater], filename: Path, format: str) -> DiveLogFormater:

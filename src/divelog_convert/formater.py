@@ -78,7 +78,8 @@ class DiveLogItem:
 
 @attr.s
 class DiveLogConfig:
-    # TODO load defaults from config file
+    # TODO load defaults from config file: class_method from_yaml / from_json
+    app_version = attr.ib(default="0.0.0", type=str)
     diver_first_name = attr.ib(default="Vivien", type=str)
     diver_last_name = attr.ib(default="Chene", type=str)
     unit_distance = attr.ib(default=DiveUnitDistance.METER, type=DiveUnitDistance)
@@ -299,7 +300,7 @@ class DiveLogbook:
         dive.location = add_dive_item(self.locations, dive.location)
         dive.equipment.pdc = add_dive_item(self.pdcs, dive.equipment.pdc)
         if dive.equipment.suit:
-            dive.equipment.suit = add_dive_item(self.suits, dive.location)
+            dive.equipment.suit = add_dive_item(self.suits, dive.equipment.suit)
 
         i = 0
         for tank in dive.equipment.tanks:

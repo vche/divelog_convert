@@ -7,6 +7,7 @@ from pathlib import Path
 
 import divelog_convert
 from divelog_convert.converter import DiveLogConverter
+from divelog_convert.formater import DiveLogConfig
 
 log = logging.getLogger(__name__)
 
@@ -51,6 +52,7 @@ def main() -> None:
     _setup_logging(level=args.log_level)
 
     try:
+        config = DiveLogConfig(app_version=divelog_convert.__version__)
         converter.convert(args.input, args.output, input_format=args.input_format, output_format=args.output_format)
         sys.exit(0)
     except Exception as e:
