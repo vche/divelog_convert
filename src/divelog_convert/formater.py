@@ -1,5 +1,6 @@
 import attr
 import logging
+import unicodedata
 from abc import ABC, abstractmethod
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Tuple
@@ -71,8 +72,12 @@ class DiveUnitVolume(Enum):
 
 class DiveLogItem:
     def uuid(self):
-        return f"{self.__class__.__name__}-{self.strid()}".replace(" ","_").lower() if self.strid() else None
-    
+        # We want to remove all special characther to keep unicode uuids
+        if self.strid():
+            uuid = unicodedata.normalize('NFKD',self.strid()).encode('ascii', 'ignore').decode()
+            return f"{self.__class__.__name__}-{uuid}".replace(" ","_").lower()
+        return None
+
     def strid(self):
         return ""
 

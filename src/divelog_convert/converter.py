@@ -50,6 +50,6 @@ class DiveLogConverter():
         input_format: Optional[str]=None,
         output_format: Optional[str]=None
     ):
-        lobgook = self.parse_logbook(input_filename, input_format)
-        self.dump_logbook(lobgook, output_filename, output_format)
+        logbook = self.parse_logbook(input_filename, input_format)
+        self.dump_logbook(logbook, output_filename, output_format)
 

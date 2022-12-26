@@ -1,6 +1,5 @@
 from asyncio import PidfdChildWatcher
 import logging
-from tracemalloc import take_snapshot
 from numpy import isin
 import xmltodict
 from abc import ABC, abstractmethod
@@ -41,6 +40,13 @@ def get_list_for_item(items_dict: Dict[str, Any], item: Any) -> List[Any]:
     return items if isinstance(items, list) else [items]
 
 
+def set_if_changed(new_dict: Dict[str, Any], old_dict: Dict[str, Any], key: str, value: Any):
+    if not old_dict or old_dict.get(key) != value:
+        if isinstance(value, float):
+            value = f"{value:.2f}"
+        new_dict[key] = value
+
+
 class XmlDiveLogFormater(DiveLogFormater):
 
     def read_dives(self, filename: Path) -> Tuple[int, DiveLogbook]:
@@ -72,6 +78,13 @@ class XmlDiveLogFormater(DiveLogFormater):
 
 
 class UddfDiveLogFormater(XmlDiveLogFormater):
+    UDDF_VIOLATIONS = {
+        DiveViolation.ASCENT: "ascent",
+        DiveViolation.DECO: "deco",
+        DiveViolation.SURFACE: "surface",
+        DiveViolation.ERROR: "error",
+    }
+
     @property
     def ext(self):
         return ".uddf"
@@ -83,6 +96,15 @@ class UddfDiveLogFormater(XmlDiveLogFormater):
     def __init__(self, config=None):
         super().__init__(config)
         self._ref_dict = {}
+
+    def _get_uddf_violation(self, violation: DiveViolation) -> str:
+        return self.UDDF_VIOLATIONS.get(violation, self.UDDF_VIOLATIONS[DiveViolation.ERROR])
+
+    def _get_uddf_violation_from_str(self, str_violation: str) -> DiveViolation:
+        for viol in self.UDDF_VIOLATIONS:
+            if str_violation == self.UDDF_VIOLATIONS[viol]:
+                return viol
+        return DiveViolation.ERROR
 
     def _parse_owner(self, logbook: DiveLogbook, owner_dict: Dict[str, Any]):
         if owner_dict:
@@ -194,15 +216,7 @@ class UddfDiveLogFormater(XmlDiveLogFormater):
     def _get_sample_violations(self, dive_sample: Dict[str, Any]) -> set:
         violations = set()
         for elt in get_list_for_item(dive_sample, 'alarm'):
-            if elt == "ascent":
-                viol = DiveViolation.ASCENT
-            elif elt == "deco":
-                viol = DiveViolation.DECO
-            elif elt == "surface":
-                viol = DiveViolation.SURFACE
-            else:
-                viol = DiveViolation.ERROR
-            violations.add(viol)
+            violations.add(self._get_uddf_violation_from_str(elt))
         return violations
 
     def _get_sample_temperature(self, last_datapoint: DiveLogData, dive_sample: Dict[str, Any]):
@@ -260,7 +274,6 @@ class UddfDiveLogFormater(XmlDiveLogFormater):
             ts = 0.0
         return ts
 
-
     def _parse_dive_data(
         self, logbook: DiveLogbook, dive_samples: Dict[str, Any]
     ) -> Tuple[int, List[DiveViolation], List[DiveLogData]]:
@@ -301,6 +314,67 @@ class UddfDiveLogFormater(XmlDiveLogFormater):
 
         return sampling_period, list(all_violations), dive_data
 
+    def _build_dive_data(self, dive: DiveLogEntry) -> List[Dict[str, Any]]:
+        dive_waypoints = []
+        last_waypoint = None
+        last_airmix = None
+        for dive_sample in dive.data:
+            dive_waypoint = { "divetime": int(dive_sample.timestamp_s) }
+            set_if_changed(dive_waypoint, last_waypoint, "depth", dive_sample.depth)
+            set_if_changed(dive_waypoint, last_waypoint, "tankpressure", dive_sample.pressure)
+            if last_airmix != dive_sample.airmix.uuid():
+                last_airmix = dive_sample.airmix.uuid()
+                dive_waypoint["switchmix"] = {"@ref": last_airmix}
+            set_if_changed(
+                dive_waypoint, last_waypoint, "temperature", 
+                self._config.unit_temperature.to_unit(DiveUnitTemperature.KELVIN, dive_sample.temp)
+            )
+
+            if dive_sample.violations:
+                dive_waypoint["alarm"] = []
+                for elt in dive_sample.violations:
+                    dive_waypoint["alarm"].append(self._get_uddf_violation(elt))
+
+            dive_waypoints.append(dive_waypoint)
+            last_waypoint = dive_waypoint
+        return dive_waypoints
+
+    def _dive_to_dict(self, dive: DiveLogEntry, logbook: DiveLogbook):
+        dive_dict = { 
+            "informationbeforedive": {"equipmentused": {}},
+            "tankdata": {},
+            "samples": [],
+            "informationafterdive": { "rating": {}},
+        }
+        dive_dict["informationbeforedive"]["divenumber"] = dive.dive_num
+        dive_dict["informationbeforedive"]["airtemperature"] = self._config.unit_temperature.to_unit(
+            DiveUnitTemperature.KELVIN, dive.stats.airtemp
+        )
+        dive_dict["informationbeforedive"]["link"] = []
+        for buddy in dive.buddies:
+            dive_dict["informationbeforedive"]["link"].append({ "@ref": buddy.uuid()})
+
+        dive_dict["informationbeforedive"]["datetime"] = dive.stats.start_datetime.isoformat()
+        dive_dict["informationbeforedive"]["equipmentused"]["leadquantity"] = dive.equipment.weight
+        if dive.location:
+            dive_dict["informationbeforedive"]["link"].append({ "@ref": dive.location.uuid()})
+
+        dive_dict["tankdata"]["tankpressurebegin"] = dive.stats.pressure_in
+        dive_dict["tankdata"]["tankpressureend"] = dive.stats.pressure_out
+
+        dive_dict["samples"] = {    "waypoint": self._build_dive_data(dive) }
+
+        dive_dict["informationafterdive"]["rating"]["ratingvalue"] = dive.rating
+        dive_dict["informationafterdive"]["greatestdepth"] = dive.stats.maxdepth
+        dive_dict["informationafterdive"]["averagedepth"] = dive.stats.avgdepth
+        dive_dict["informationafterdive"]["lowesttemperature"] = self._config.unit_temperature.to_unit(
+                    DiveUnitTemperature.KELVIN, dive.stats.mintemp
+                ),
+        dive_dict["informationafterdive"]["diveduration"] = dive.stats.duration.total_seconds()
+        if dive.notes:
+            dive_dict["informationafterdive"]["notes"] = { "para": dive.notes }
+
+        return dive_dict
 
     def _parse_dive(self, logbook: DiveLogbook, dive: Dict[str, Any]):
         # Collect dive information and tank data
@@ -311,7 +385,7 @@ class UddfDiveLogFormater(XmlDiveLogFormater):
         # Build the dive data
         sampling_period, all_violations, dive_data = self._parse_dive_data(logbook, dive.get("samples", {}))
 
-        notes = equipment_used.get("notes", {})
+        notes = dive["informationafterdive"].get("notes", {})
         if "para" in notes:
             notes = notes["para"]
 
@@ -342,7 +416,7 @@ class UddfDiveLogFormater(XmlDiveLogFormater):
             ),
             equipment = DiveEquipment(weight = int(equipment_used.get("leadquantity", 0))),
             notes = notes,
-            rating = equipment_used.get("rating", {}).get("ratingvalue"),
+            rating = dive["informationafterdive"].get("rating", {}).get("ratingvalue"),
             data = dive_data,
         )
         dive_entry.stats.duration = timedelta(seconds = float(dive["informationafterdive"].get("diveduration", 0)))
@@ -424,9 +498,6 @@ class UddfDiveLogFormater(XmlDiveLogFormater):
             "h2": airmix.h2,
         }
 
-    def _dive_to_dict(self, diver: Diver, logbook: DiveLogbook):
-        return {}
-
     def parse_xml_dict(self, xml_dict: Dict[str, Any]) -> Tuple[int, DiveLogbook]:
         logbook = DiveLogbook()
         udf_data = xml_dict['uddf']
@@ -476,8 +547,10 @@ class UddfDiveLogFormater(XmlDiveLogFormater):
             for loc in logbook.airmix.values():
                 logbook_dict["uddf"]["gasdefinitions"]["mix"].append(self._airmix_to_dict(loc))
         
-        logbook_dict["uddf"]["profiledata"] = { "repetitiongroup": [{"dive": []}]}
-        # for dive in logbook.dives:
-        #     logbook_dict["profiledata"]["repetitiongroup"]["dive"].append().self._dive_to_dict(dive, logbook)
+        logbook_dict["uddf"]["profiledata"] = []
+        for dive in logbook.dives:
+            logbook_dict["uddf"]["profiledata"].append(
+                { "repetitiongroup": [{"dive": self._dive_to_dict(dive, logbook)}] }
+            )
 
         return logbook_dict

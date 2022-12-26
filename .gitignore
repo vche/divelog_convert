@@ -5,3 +5,5 @@ pyvenv
 docs/doc
 __pycache__
 temp
+build
+dist

@@ -43,6 +43,13 @@ class CsvDiveLogFormater(DiveLogFormater):
                     self.log.exception(f"Failed to build log entry: {e}")
                     errors += 1
             self.log.info(f"{len(logbook.dives)} dives read from {filename}, {errors} errors")
+
+            # CSV usually does not have diver information use config
+            if not logbook.diver:
+                logbook.diver = Diver(
+                    first_name= self._config.diver_first_name, last_name= self._config.diver_last_name
+                )
+
             return logbook
 
     def write_dives(self, filename: Path, logbook: DiveLogbook):
