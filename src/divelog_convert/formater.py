@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Tuple
 from pathlib import Path
 from enum import Enum
+from tempfile import TemporaryDirectory
 
 
 class DiveViolation(Enum):
@@ -320,24 +321,25 @@ class DiveLogbook:
         self.dives.append(dive)
 
 
-class DiveLogFormater(ABC):
+class Formater(ABC):
+    ext = None
+    name = None
 
-    @property
-    @abstractmethod
-    def ext(self):
-        ...
-
-    @property
-    @abstractmethod
-    def name(self):
-        ...
-
-    def __init__(self, config=None):
+    def __init__(self, config=None, filename=None):
         self._config = config or DiveLogConfig()
         self.log = logging.getLogger(self.__class__.__name__)
+        self.filename = filename
     
     def __repr__(self):
         return f"'{self.name}' ({self.ext})"
+
+
+class DiveLogFormater(Formater):
+
+    def __init__(self, *args, open_func=None, **kwargs):
+        self.temp_path = TemporaryDirectory()
+        self.open_func = open_func or open
+        super().__init__(*args, **kwargs)
 
     @abstractmethod
     def read_dives(self, filename: Path) -> DiveLogbook:
@@ -345,4 +347,45 @@ class DiveLogFormater(ABC):
 
     @abstractmethod
     def write_dives(self, filename: Path, logbook: DiveLogbook):
+        ...
+
+
+class ArchiveFormater(Formater):
+    logbook_files = []
+    archive_file = None
+
+    def __init__(self, *args, **kwargs):
+        self.temp_path = TemporaryDirectory()
+        super().__init__(*args, **kwargs)
+
+    def open(self):
+        self.logbook_files = self.read_logbooks(self.filename)
+
+    def close(self):
+        if self.archive_file:
+            self.archive_file.close()
+
+    def save(self):
+        self.write_logbooks(self.filename, self.logbook_files)
+        self.extracted_path
+
+    def __enter__(self):
+        self.open()
+        return self
+
+    def __exit__(self, type, value, traceback):
+        self.close()
+
+    def get_log_books(self) -> List[DiveLogbook]:
+        return self.logbook_files
+
+    def add_log_books(self, logbooks: List[DiveLogbook]):
+        self.logbook_files.extend(logbooks)
+
+    @abstractmethod
+    def read_logbooks(self, filename: Path) -> List[DiveLogbook]:
+        ...
+
+    @abstractmethod
+    def write_logbooks(self, filename: Path, logbooks: List[DiveLogbook], ):
         ...

@@ -11,6 +11,9 @@ from divelog_convert.formater import (
 
 
 class DL7DiveLogFormater(DiveLogFormater):
+    ext = ".zxu"
+    name = "dl7"
+
     DLA_ID = "ABC123"
     NMRI_PRESSURE_UNIT={
         DiveUnitPressure.BAR: "bar",
@@ -25,14 +28,6 @@ class DL7DiveLogFormater(DiveLogFormater):
         DiveUnitDistance.FEET: "FSWG",
         DiveUnitDistance.METER: "MSWG",
     }
-
-    @property
-    def ext(self):
-        return ".zxu"
-
-    @property
-    def name(self):
-        return "dl7"
 
     def _strval(self, value):
         return value if value else ""
@@ -99,7 +94,12 @@ class DL7DiveLogFormater(DiveLogFormater):
         )
 
     def read_dives(self, filename: Path) -> DiveLogbook:
-        raise NotImplementedError("DL7 dive log module doesn't support decoding")
+        with self.open_func(filename, "r") as dive_file:
+            self.log.info(f"Reading dives read from {filename}")
+            raw_content = dive_file.read()
+            content = raw_content.decode() if isinstance(raw_content, bytes) else raw_content
+            # print(content)
+        return None
 
     def write_dives(self, filename: Path, logbook: DiveLogbook, single_file:bool = True):
         # Make sur the destination file has the right suffix
@@ -134,10 +134,7 @@ class DL7DiveLogFormater(DiveLogFormater):
 
 class DL7DiverlogDiveLogFormater(DL7DiveLogFormater):
     """DL7 format with Diverlog+ specific information..."""
-
-    @property
-    def name(self):
-        return "diverlog"
+    name = "diverlog"
 
     def write_dives(self, filename: Path, logbook: DiveLogbook, single_file:bool = True):
         # Diverlogs only support 1 dive per file

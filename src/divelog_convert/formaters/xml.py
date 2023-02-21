@@ -50,9 +50,11 @@ def set_if_changed(new_dict: Dict[str, Any], old_dict: Dict[str, Any], key: str,
 class XmlDiveLogFormater(DiveLogFormater):
 
     def read_dives(self, filename: Path) -> Tuple[int, DiveLogbook]:
-        with open(filename, "r") as dive_file:
+        with self.open_func(filename, "r") as dive_file:
             self.log.info(f"Reading dives read from {filename}")
-            dive_dict = xmltodict.parse(dive_file.read())
+            raw_content = dive_file.read()
+            content = raw_content.decode() if isinstance(raw_content, bytes) else raw_content
+            dive_dict = xmltodict.parse(content)
             errors, logbook = self.parse_xml_dict(dive_dict)
             self.log.info(f"{len(logbook.dives)} dives read from {filename}, {errors} errors")
             return logbook
@@ -78,6 +80,9 @@ class XmlDiveLogFormater(DiveLogFormater):
 
 
 class UddfDiveLogFormater(XmlDiveLogFormater):
+    ext = ".uddf"
+    name = "uddf"
+
     UDDF_VIOLATIONS = {
         DiveViolation.ASCENT: "ascent",
         DiveViolation.DECO: "deco",
@@ -85,16 +90,8 @@ class UddfDiveLogFormater(XmlDiveLogFormater):
         DiveViolation.ERROR: "error",
     }
 
-    @property
-    def ext(self):
-        return ".uddf"
-
-    @property
-    def name(self):
-        return "uddf"
-
-    def __init__(self, config=None):
-        super().__init__(config)
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         self._ref_dict = {}
 
     def _get_uddf_violation(self, violation: DiveViolation) -> str:

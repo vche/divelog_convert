@@ -22,13 +22,8 @@ from divelog_convert.formater import (
 
 
 class CsvDiveLogFormater(DiveLogFormater):
-    @property
-    def ext(self):
-        return ".csv"
-
-    @property
-    def name(self):
-        return "csv"
+    ext = ".csv"
+    name = "csv"
 
     def read_dives(self, filename: Path) -> DiveLogbook:
         with open(filename, "r") as dive_file:
@@ -77,6 +72,8 @@ class CsvDiveLogFormater(DiveLogFormater):
 
 
 class DiviacCsvDiveLogFormater(CsvDiveLogFormater):
+    name = "diviac"
+
     DIVIAC_CSV_FIELDS = [
         "Dive #",
         "Date",
@@ -113,10 +110,6 @@ class DiviacCsvDiveLogFormater(CsvDiveLogFormater):
         "Marine life sightings",
         "Dive profile data",
     ]
-
-    @property
-    def name(self):
-        return "diviac"
 
     def __init__(self, config=None):
         super().__init__(config)
