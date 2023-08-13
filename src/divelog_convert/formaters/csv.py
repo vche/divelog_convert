@@ -29,7 +29,7 @@ class CsvDiveLogFormater(DiveLogFormater):
         with open(filename, "r") as dive_file:
             self.log.info(f"Reading dives read from {filename}")
             csv_reader = csv.DictReader(dive_file)
-            logbook = DiveLogbook()
+            logbook = DiveLogbook(config=self._config)
             errors = 0
             for row in csv_reader:
                 try:

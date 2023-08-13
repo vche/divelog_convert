@@ -16,16 +16,18 @@ def _parse_args(converter: DiveLogConverter) -> Namespace:
     parser = ArgumentParser(description="Dive logs format conversion")
     parser.add_argument("--input", "-i", help="Input dive log file", required=True)
     parser.add_argument("--output", "-o", help="Output dive log file", required=True)
+    decoders = [dec.class_repr() for dec in converter.decoders]
+    encoders = [enc.class_repr() for enc in converter.decoders]
     parser.add_argument(
         "--input-format", "-if",
-        help=f"Optional input format, or detected from file extension. Accepted formats: {converter.decoders}",
+        help=f"Optional input format, or detected from file extension. Accepted formats: {decoders}",
         required=False,
         default=None,
     )
     parser.add_argument(
         "--output-format",
         "-of",
-        help=f"Optional output format, or detected from file extension. Accepted formats: {converter.encoders}",
+        help=f"Optional output format, or detected from file extension. Accepted formats: {encoders}",
         required=False,
         default=None,
     )

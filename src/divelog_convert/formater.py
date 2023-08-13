@@ -73,7 +73,7 @@ class DiveUnitVolume(Enum):
 
 class DiveLogItem:
     def uuid(self):
-        # We want to remove all special characther to keep unicode uuids
+        # We want to remove all special characters to keep unicode uuids
         if self.strid():
             uuid = unicodedata.normalize('NFKD',self.strid()).encode('ascii', 'ignore').decode()
             return f"{self.__class__.__name__}-{uuid}".replace(" ","_").lower()
@@ -84,9 +84,10 @@ class DiveLogItem:
 
 @attr.s
 class DiveLogConfig:
+    DEFAULT_DIVER = "Unnamed Diver"
     # TODO load defaults from config file: class_method from_yaml / from_json
     app_version = attr.ib(default="0.0.0", type=str)
-    diver_first_name = attr.ib(default="Vivien", type=str)
+    diver_first_name = attr.ib(default="VivienPipo", type=str)
     diver_last_name = attr.ib(default="Chene", type=str)
     unit_distance = attr.ib(default=DiveUnitDistance.METER, type=DiveUnitDistance)
     unit_temperature = attr.ib(default=DiveUnitTemperature.CELSIUS, type=DiveUnitTemperature)
@@ -281,18 +282,29 @@ def add_dive_item(item_list: Dict[str, DiveLogItem], item: DiveLogItem):
 
 @attr.s
 class DiveLogbook:
-    diver = attr.ib(default=None, type=dict[Diver])
+    _diver = attr.ib(default=None, type=Diver)
+    _airmix = attr.ib(factory=dict, type=dict[DiveAirMix])
+    pdcs = attr.ib(factory=dict, type=dict[DiveComputer])
     locations = attr.ib(factory=dict, type=dict[DiveLogLocation])
     buddies = attr.ib(factory=dict, type=dict[Diver])
-    airmix = attr.ib(factory=dict, type=dict[DiveAirMix])
     suits = attr.ib(factory=dict, type=dict[DiveSuit])
     tanks = attr.ib(factory=dict, type=dict[DiveTank])
-    pdcs = attr.ib(factory=dict, type=dict[DiveComputer])
+    config = attr.ib(default=None, type=DiveLogConfig)
 
     dives = attr.ib(factory=list, type=list[DiveLogEntry])
 
+    def merge(self, logbook):
+        # Divers can't be merged, so keep the original one
+        self._airmix.update(logbook._airmix)
+        self.pdcs.update(logbook.pdcs)
+        self.locations.update(logbook.locations)
+        self.buddies.update(logbook.buddies)
+        self.suits.update(logbook.suits)
+        self.tanks.update(logbook.tanks)
+        self.dives.extend(logbook.dives)
+
     def add_airmix(self, item: DiveAirMix):
-        return add_dive_item(self.airmix, item)
+        return add_dive_item(self._airmix, item)
 
     def add_dive(self, dive: DiveLogEntry):
         # Add items to the main logbook list if not already there
@@ -320,6 +332,26 @@ class DiveLogbook:
 
         self.dives.append(dive)
 
+    @property
+    def diver(self) -> Diver:
+        if self.config and not self._diver:
+            self.diver = Diver(first_name = self.config.diver_first_name, last_name = self.config.diver_last_name)
+        return self._diver
+
+    @diver.setter
+    def diver(self, value: Diver) -> None:
+        self._diver = value
+
+    @property
+    def airmix(self) -> dict[DiveAirMix]:
+        if not self._airmix:
+            self.airmix = self.add_airmix(DiveAirMix())
+        return self._airmix
+
+    @airmix.setter
+    def airmix(self, value: dict[DiveAirMix]) -> None:
+        self._airmix = value
+
 
 class Formater(ABC):
     ext = None
@@ -329,9 +361,14 @@ class Formater(ABC):
         self._config = config or DiveLogConfig()
         self.log = logging.getLogger(self.__class__.__name__)
         self.filename = filename
-    
+
+
+    @classmethod
+    def class_repr(cls):
+        return f"'{cls.name}' ({cls.ext})"
+
     def __repr__(self):
-        return f"'{self.name}' ({self.ext})"
+        return f"'{self.name}' ({self.ext}: {self.filename})"
 
 
 class DiveLogFormater(Formater):

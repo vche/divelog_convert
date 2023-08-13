@@ -48,13 +48,15 @@ https://gist.github.com/jadeatucker/5382343
 - handle macdive xml ?
 
 - Process to get all into a new app:
-    - Diviac export to csv
-    - Convert csv to uddf: `divelog_convert -d -i test/data/diviac-export3.csv -if diviac -o temp/diviac_convert.uddf`
-
-    - Export diverlog cloud [to be synced from dive computer to get latest dives]
-    - TODO: support .zip : unzip, get and import all zxu, remove
-    - TODO: Convert required zxu to uddf: `divelog_convert -d -i test/data/diviac-export3.csv -if diviac -o temp/diviac_convert.uddf`
-
+    - From Diviac:
+        - Diviac export to csv
+        - Convert csv to uddf: `divelog_convert -d -i test/data/diviac-export3.csv -if diviac -o temp/from_diviac.uddf`
+    - From JTrak:
+        - Export to uddf
+        - Enrich: `divelog_convert -d -i test/data/jtrak-export.uddf -o temp/from_jtrak.uddf`
+    - From dive cloud:
+        - Export diverlog cloud [to be synced from dive computer to get latest dives]
+        - Convert required zxu to uddf: `divelog_convert -d -i data/divecloud_20221226174016.zip -if diverlog -o data/from_divelog.uddf`
     - Import all uddf to subsurface / macdive
 
 - Process to import dives to diverlog
@@ -62,3 +64,8 @@ https://gist.github.com/jadeatucker/5382343
     - Export to zxu `divelog_convert -d -i test/data/diviac-export3.csv -o temp/aqualung -of "diverlog"`
     - Import all .zxu to diverlog cloud
     - Sync with app
+
+TODO:
+    - Support heliox and trimix in dl7 air parse (parse_zdp_line)
+    - Find where notes are and export them in dl7
+    - Import missing dives from smartz

@@ -51,7 +51,7 @@ class XmlDiveLogFormater(DiveLogFormater):
 
     def read_dives(self, filename: Path) -> Tuple[int, DiveLogbook]:
         with self.open_func(filename, "r") as dive_file:
-            self.log.info(f"Reading dives read from {filename}")
+            self.log.info(f"Reading dives from {filename}")
             raw_content = dive_file.read()
             content = raw_content.decode() if isinstance(raw_content, bytes) else raw_content
             dive_dict = xmltodict.parse(content)
@@ -64,7 +64,7 @@ class XmlDiveLogFormater(DiveLogFormater):
             filename = filename.with_suffix(self.ext)
 
         with open(filename, "w") as dive_file:
-            self.log.info(f"Writing {len(logbook.dives)} dives written to {filename}")
+            self.log.info(f"Writing {len(logbook.dives)} dives to {filename}")
             dive_dict = self.build_xml_dict(logbook)
             xml_data = xmltodict.unparse(dive_dict, pretty=True, indent="    ")
             dive_file.write(xml_data)
@@ -496,7 +496,7 @@ class UddfDiveLogFormater(XmlDiveLogFormater):
         }
 
     def parse_xml_dict(self, xml_dict: Dict[str, Any]) -> Tuple[int, DiveLogbook]:
-        logbook = DiveLogbook()
+        logbook = DiveLogbook(config=self._config)
         udf_data = xml_dict['uddf']
         self._parse_owner(logbook, udf_data.get('diver', {}).get('owner'))
         self._parse_buddies(logbook, udf_data.get('diver', {}).get('buddy'))

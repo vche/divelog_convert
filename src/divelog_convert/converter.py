@@ -33,8 +33,10 @@ class DiveLogConverter():
         self.archive_decoders = [ ZipArchiveFormater ]
         self.decoders = self.file_decoders + self.archive_decoders
         self.encoders = self.file_encoders
+    def _get_formater(
+        self, formaters: List[Formater], filename: Path, format: Optional[str] = None, exc: bool = True
+    ) -> Formater:
 
-    def _get_formater(self, formaters: List[Formater], filename: Path, format: str, exc: bool = True) -> Formater:
         for formater in formaters:  
             if format == formater.name or ((not format) and (formater.ext == filename.suffix)):
                 return formater
@@ -47,12 +49,12 @@ class DiveLogConverter():
         formater = self._get_formater(self.decoders, filepath, format)
         return formater(self._config, filepath, open_func=open_func).read_dives(filename)
 
-    def parse_archive(self, filename: str, archive_formater: Formater = None) -> DiveLogbook:
+    def parse_archive(self, filename: str, archive_formater: Formater = None, format: str = None) -> DiveLogbook:
         filepath = Path(filename)
         logbooks = []
         with archive_formater(self._config, filepath) as archive:
             for logbook_file in archive.get_log_books():
-                logbook = self.parse_logbook(logbook_file, open_func=archive.archive_file.open)
+                logbook = self.parse_logbook(logbook_file, format = format, open_func=archive.archive_file.open)
                 if logbook:
                     logbooks.append(logbook)
         return self.merge_logbooks(logbooks)
@@ -66,7 +68,6 @@ class DiveLogConverter():
     def merge_logbooks(self, logbooks: List[DiveLogbook]) -> DiveLogbook:
         if not logbooks:
             return None
-        print(logbooks)
         logbook = copy.deepcopy(logbooks[0])
         for logbook_elt in logbooks[1:]:
             logbook.merge(logbook_elt)
@@ -80,9 +81,9 @@ class DiveLogConverter():
         output_format: Optional[str]=None
     ):
         # Check if the file is an archive and decode it
-        archive_formater = self._get_formater(self.archive_decoders, Path(input_filename), input_format, exc = False)
+        archive_formater = self._get_formater(self.archive_decoders, Path(input_filename), exc = False)
         if archive_formater:
-            logbook = self.parse_archive(input_filename, archive_formater)
+            logbook = self.parse_archive(input_filename, archive_formater, input_format)
         else:
             # Not an archive
             logbook = self.parse_logbook(input_filename, input_format)
