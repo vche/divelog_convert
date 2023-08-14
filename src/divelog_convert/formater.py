@@ -303,6 +303,13 @@ class DiveLogbook:
         self.tanks.update(logbook.tanks)
         self.dives.extend(logbook.dives)
 
+        # Sort the dives chronologically and renumber them
+        self.dives.sort(key=lambda dive: datetime.timestamp(dive.stats.start_datetime))
+        divenum = 1
+        for dive in self.dives:
+            dive.dive_num = divenum
+            divenum += 1
+
     def add_airmix(self, item: DiveAirMix):
         return add_dive_item(self._airmix, item)
 
@@ -364,6 +371,10 @@ class Formater(ABC):
 
 
     @classmethod
+    def match_file(cls, filepath: Path):
+        return cls.ext == filepath.suffix
+
+    @classmethod
     def class_repr(cls):
         return f"'{cls.name}' ({cls.ext})"
 
@@ -412,6 +423,9 @@ class ArchiveFormater(Formater):
 
     def __exit__(self, type, value, traceback):
         self.close()
+
+    def get_open_func(self):
+        return  self.archive_file.open if self.archive_file else None
 
     def get_log_books(self) -> List[DiveLogbook]:
         return self.logbook_files

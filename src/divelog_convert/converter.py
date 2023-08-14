@@ -5,6 +5,7 @@ from pathlib import Path
 from divelog_convert.formater import DiveLogConfig, DiveLogbook, Formater
 from divelog_convert.formaters.csv import DiviacCsvDiveLogFormater
 from divelog_convert.formaters.dl7 import DL7DiveLogFormater, DL7DiverlogDiveLogFormater
+from divelog_convert.formaters.list import ListArchiveFormater
 from divelog_convert.formaters.xml import UddfDiveLogFormater
 from divelog_convert.formaters.zip import ZipArchiveFormater
 
@@ -30,7 +31,7 @@ class DiveLogConverter():
             DL7DiveLogFormater,
             DL7DiverlogDiveLogFormater,
         ]
-        self.archive_decoders = [ ZipArchiveFormater ]
+        self.archive_decoders = [ ZipArchiveFormater, ListArchiveFormater ]
         self.decoders = self.file_decoders + self.archive_decoders
         self.encoders = self.file_encoders
     def _get_formater(
@@ -38,7 +39,7 @@ class DiveLogConverter():
     ) -> Formater:
 
         for formater in formaters:  
-            if format == formater.name or ((not format) and (formater.ext == filename.suffix)):
+            if format == formater.name or ((not format) and formater.match_file(filename)):
                 return formater
         if not exc:
             return None
@@ -54,7 +55,7 @@ class DiveLogConverter():
         logbooks = []
         with archive_formater(self._config, filepath) as archive:
             for logbook_file in archive.get_log_books():
-                logbook = self.parse_logbook(logbook_file, format = format, open_func=archive.archive_file.open)
+                logbook = self.parse_logbook(logbook_file, format = format, open_func=archive.get_open_func())
                 if logbook:
                     logbooks.append(logbook)
         return self.merge_logbooks(logbooks)

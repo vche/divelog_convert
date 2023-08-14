@@ -300,6 +300,7 @@ class DL7DiverlogDiveLogFormater(DL7DiveLogFormater):
     re_diver = re.compile(
         r"<DIVER_NAME>(FIRSTNAME=\[(?P<first_name>.*)\]\s*,\s*)?LASTNAME=\[(?P<last_name>.*)\]<\/DIVER_NAME>"
     )
+    re_notes = re.compile(r"<DIVEMEMO>(?P<notes>.*)</DIVEMEMO>")
     re_pdc_model = re.compile(r"<PDC_MODEL>(?P<pdc_model>.*)</PDC_MODEL>")
     re_pdc_sn = re.compile(r"<PDC_SERIAL>(?P<pdc_serial>.*)</PDC_SERIAL>")
     re_pdc_mn = re.compile(r"<MANUFACTURER>(?P<pdc_manufacturer>.*)</MANUFACTURER>")
@@ -336,6 +337,11 @@ class DL7DiverlogDiveLogFormater(DL7DiveLogFormater):
                     ln = tokens[1]
             dive.diver = Diver(first_name=fn, last_name=ln)
             logbook.diver = dive.diver
+
+        # Parse notes
+        notes = self.re_notes.findall(line)
+        if notes:
+            dive.notes = notes[0]
 
         # Parse pdc info
         pdc_model = self.re_pdc_model.findall(line)

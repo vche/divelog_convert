@@ -4,8 +4,6 @@ Utility tool to convert various dive log formats.
 Currently support 
 - DL7 from [divecloud](https://www.divecloud.net/)/[diverlog+](https://www.ediverlog.com/)
 - CSV from [diviac](https://logbook.diviac.com/)
-
-Work in progress:
 - UDDF support for [jtrak/smarttrak](https://ww2.scubapro.com/en-GB/HKG/product-support.aspx?subject=manuals)/[subsurface](https://subsurface-divelog.org/)/[macdive](https://www.mac-dive.com/)/[diviac](https://logbook.diviac.com/)).
 - Mac native ui (currently only in command line)
 - Actual documentation with examples
@@ -47,7 +45,7 @@ https://gist.github.com/jadeatucker/5382343
 - handle xml subsurface ?
 - handle macdive xml ?
 
-- Process to get all into a new app:
+- Process to get all dives from differnt sources into a new app:
     - From Diviac:
         - Diviac export to csv
         - Convert csv to uddf: `divelog_convert -d -i test/data/diviac-export3.csv -if diviac -o temp/from_diviac.uddf`
@@ -56,8 +54,9 @@ https://gist.github.com/jadeatucker/5382343
         - Enrich: `divelog_convert -d -i test/data/jtrak-export.uddf -o temp/from_jtrak.uddf`
     - From dive cloud:
         - Export diverlog cloud [to be synced from dive computer to get latest dives]
-        - Convert required zxu to uddf: `divelog_convert -d -i data/divecloud_20221226174016.zip -if diverlog -o data/from_divelog.uddf`
+        - Convert required zxu to uddf: `divelog_convert -d -i data/divecloud_20221226174016.zip -if diverlog -o temp/from_divelog.uddf`
     - Import all uddf to subsurface / macdive
+        - Merge all uddf into one: `divelog_convert -d -i temp/from_diviac.uddf,temp/from_divelog.uddf -o temp/all_dives.uddf`
 
 - Process to import dives to diverlog
     - Diviac export to csv (or macdive/subsurface)
@@ -67,5 +66,5 @@ https://gist.github.com/jadeatucker/5382343
 
 TODO:
     - Support heliox and trimix in dl7 air parse (parse_zdp_line)
-    - Find where notes are and export them in dl7
     - Import missing dives from smartz
+    - Fix UI

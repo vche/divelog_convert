@@ -6,6 +6,7 @@ from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional, Tuple, Union
 from pathlib import Path
 from datetime import date, datetime, timedelta
+import json
 
 from divelog_convert.formater import (
     DiveSuit,
@@ -170,20 +171,21 @@ class UddfDiveLogFormater(XmlDiveLogFormater):
                     he=float(gas.get('he', 0.0)),
                     ar=float(gas.get('ar', 0.0)),
                 )
-                logbook.airmix[gas_obj.uuid()] = gas_obj
+                logbook.add_airmix(gas_obj)
                 self._ref_dict[gas['@id']] = gas_obj
 
     def _parse_dives(self, logbook: DiveLogbook, dives: Optional[Dict[Union[str, Any], List[Dict[str, Any]]]]):
         errors = 0
-        for group in get_list_for_item(dives, 'repetitiongroup'):
-            dives = group['dive'] if isinstance(group['dive'], list) else [group['dive']]            
-            for dive in dives:
-                try:
-                    self._parse_dive(logbook, dive)
-                except KeyError as e:
-                    self.log.error(f"Cannot parse dive: {e}")
-                    self.exception(e)
-                    errors = errors + 1
+        for dive_group in dives:
+            for group in get_list_for_item(dive_group, 'repetitiongroup'):
+                dives = group['dive'] if isinstance(group['dive'], list) else [group['dive']]            
+                for dive in dives:
+                    try:
+                        self._parse_dive(logbook, dive)
+                    except KeyError as e:
+                        self.log.error(f"Cannot parse dive: {e}")
+                        self.exception(e)
+                        errors = errors + 1
         return errors
 
     def _process_link(self, logbook: DiveLogbook, dive: DiveLogEntry, links: Union[Dict[str,Any], List[Dict[str,Any]]]):
@@ -502,7 +504,7 @@ class UddfDiveLogFormater(XmlDiveLogFormater):
         self._parse_buddies(logbook, udf_data.get('diver', {}).get('buddy'))
         self._parse_locations(logbook, udf_data.get('divesite', {}).get("site"))
         self._parse_gas(logbook, udf_data.get('gasdefinitions', {}).get("mix"))
-        errors = self._parse_dives(logbook, udf_data.get("profiledata"))
+        errors = self._parse_dives(logbook, get_list_for_item(udf_data, "profiledata"))
 
         return errors, logbook
 
